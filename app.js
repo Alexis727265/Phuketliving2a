@@ -12,9 +12,8 @@ const photos=document.querySelector('#photos'), previews=document.querySelector(
 async function compressImage(file){
  if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw new Error('Please select JPG, PNG or WebP images.');
  const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});
- const landscape=bitmap.width>=bitmap.height, maxWidth=landscape?1920:1080, maxHeight=landscape?1080:1920;
- const scale=Math.min(1,maxWidth/bitmap.width,maxHeight/bitmap.height);
- const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+ const dimensions=fit1080(bitmap.width,bitmap.height);
+ const canvas=document.createElement('canvas');canvas.width=dimensions.width;canvas.height=dimensions.height;
  const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
  const blob=await new Promise((resolve,reject)=>canvas.toBlob(x=>x?resolve(x):reject(new Error('Could not compress image.')),'image/jpeg',0.82));return blob;
 }
