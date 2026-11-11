@@ -58,3 +58,23 @@ create policy "pl2 admins update messages" on public.pl2_messages for update to 
 create policy "pl2 admins delete messages" on public.pl2_messages for delete to authenticated using (exists (select 1 from public.pl2_admins where user_id = (select auth.uid())));
 -- A trusted server needs to add the specified verified administrator by email.
 -- Anonymous submission inserts are intentionally not exposed directly to the Data API.
+
+-- Global admission limit caps public submission load. Only the service role may call it.
+create table public.pl2_rate_events (created_at timestamptz not null default now());
+create index pl2_rate_events_time_idx on public.pl2_rate_events (created_at);
+alter table public.pl2_rate_events enable row level security;
+revoke all on public.pl2_rate_events from public, anon, authenticated;
+create function public.pl2_reserve_submission() returns boolean
+language plpgsql security invoker set search_path = '' as $$
+begin
+  perform pg_catalog.pg_advisory_xact_lock(89452037);
+  delete from public.pl2_rate_events where created_at < now() - interval '2 hours';
+  if (select count(*) from public.pl2_rate_events where created_at >= now() - interval '1 hour') >= 100 then
+    return false;
+  end if;
+  insert into public.pl2_rate_events default values;
+  return true;
+end;
+$$;
+revoke all on function public.pl2_reserve_submission() from public, anon, authenticated;
+grant execute on function public.pl2_reserve_submission() to service_role;
