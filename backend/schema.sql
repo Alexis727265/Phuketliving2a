@@ -78,3 +78,4 @@ end;
 $$;
 revoke all on function public.pl2_reserve_submission() from public, anon, authenticated;
 grant execute on function public.pl2_reserve_submission() to service_role;
+grant select, insert, update, delete on public.pl2_admins, public.pl2_properties, public.pl2_property_contacts, public.pl2_messages, public.pl2_rate_events to service_role;
