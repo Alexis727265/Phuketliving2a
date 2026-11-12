@@ -5,7 +5,7 @@ export function createClient({ url, publicKey, anonToken, fetch: send = globalTh
   const call=async(path,{method='GET',token=anonToken,body,headers={}}={})=>{
     const result=await send(`${url}${path}`,{method,headers:{apikey:publicKey,authorization:`Bearer ${token}`,...headers},body});
     const data=result.status===204?null:await result.json().catch(()=>null);
-    if(!result.ok)throw new Error(data?.error_description || data?.error || 'Request failed. Please try again.');
+    if(!result.ok){const message=data?.error_description || data?.msg || (typeof data?.error==='string'?data.error:null) || data?.message;const invalid=data?.error_code==='invalid_credentials'||/invalid login credentials/i.test(message||'');throw new Error(invalid?'Email or password is incorrect. Use your latest password; saved autofill may be outdated.':message||'Request failed. Please try again.');}
     return data;
   };
   const json=(body)=>({body:JSON.stringify(body),headers:{'content-type':'application/json'}});
@@ -15,6 +15,7 @@ export function createClient({ url, publicKey, anonToken, fetch: send = globalTh
     async getProperty(id){const rows=await call('/rest/v1/pl2_properties?select=*&status=eq.published&id=eq.'+encodeURIComponent(id)+'&limit=1');return rows?.[0]||null;},
     async sendForm(form){return call('/functions/v1/pl2-submit',{method:'POST',body:form});},
     async login(email,password){
+      email=email.trim().toLowerCase();
       const candidate=await call('/auth/v1/token?grant_type=password',{method:'POST',...json({email,password})});
       if(!candidate?.access_token||!candidate?.user?.id)throw new Error('Sign in failed');
       const rows=await call(`/rest/v1/pl2_admins?select=user_id&user_id=eq.${encodeURIComponent(candidate.user.id)}`,{token:candidate.access_token});
