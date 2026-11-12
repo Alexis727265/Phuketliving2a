@@ -20,3 +20,4 @@ test('rejects accounts without admin membership',async()=>{
  const client=createClient({url:'https://example.test',publicKey:'public',anonToken:'anon',fetch:fake});
  await assert.rejects(client.login('a@b.com','example'),/not an administrator/);await assert.rejects(client.messages(),/sign in/);
 });
+test('shows Supabase invalid-password errors clearly and normalizes email',async()=>{let body;const client=createClient({url:'https://example.test',publicKey:'public',anonToken:'anon',fetch:async(url,options)=>{body=JSON.parse(options.body);return Response.json({code:400,msg:'Invalid login credentials'},{status:400});}});await assert.rejects(client.login(' Admin@Example.com ','password with spaces '),/Email or password is incorrect/);assert.equal(body.email,'admin@example.com');assert.equal(body.password,'password with spaces ');});
