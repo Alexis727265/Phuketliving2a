@@ -18,7 +18,7 @@ export async function handle(req, ctx){
  const db=async(path, options={})=>{
   const result=await ctx.fetch(`${ctx.url}${path}`,{...options,headers:{...auth,...options.headers}});
   if(!result.ok)throw new Error('Service is temporarily unavailable');
-  return result.status===204?null:result.json();
+  const text=await result.text();return text?JSON.parse(text):null;
  };
  try{
   const contentType=req.headers.get('content-type')||'';
@@ -36,7 +36,7 @@ export async function handle(req, ctx){
   if(!allowed)return response(429,{error:'Please try again later'});
   if(message){await db('/rest/v1/pl2_messages',{method:'POST',headers:{'content-type':'application/json','prefer':'return=minimal'},body:JSON.stringify(message)});return response(200,{ok:true});}
   // Provision through the Storage API, never by mutating storage metadata tables.
-  if(photoBytes.length){const check=await ctx.fetch(`${ctx.url}/storage/v1/bucket/${bucket}`,{headers:auth});if(check.status===404){const result=await ctx.fetch(`${ctx.url}/storage/v1/bucket`,{method:'POST',headers:{...auth,'content-type':'application/json'},body:JSON.stringify({id:bucket,name:bucket,public:true,file_size_limit:3000000,allowed_mime_types:['image/jpeg']})});if(!result.ok&&result.status!==409)throw new Error('Storage is temporarily unavailable');}else if(!check.ok)throw new Error('Storage is temporarily unavailable');}
+  if(photoBytes.length){const check=await ctx.fetch(`${ctx.url}/storage/v1/bucket/${bucket}`,{headers:auth});if(check.status===404 || (check.status===400 && (await check.clone().text()).toLowerCase().includes('bucket not found'))){const result=await ctx.fetch(`${ctx.url}/storage/v1/bucket`,{method:'POST',headers:{...auth,'content-type':'application/json'},body:JSON.stringify({id:bucket,name:bucket,public:true,file_size_limit:3000000,allowed_mime_types:['image/jpeg']})});if(!result.ok&&result.status!==409)throw new Error('Storage is temporarily unavailable');}else if(!check.ok)throw new Error('Storage is temporarily unavailable');}
   const id=crypto.randomUUID();const uploaded=[];
   try{
    for(let i=0;i<photoBytes.length;i++){const path=`${id}/${i+1}.jpg`;const result=await ctx.fetch(`${ctx.url}/storage/v1/object/${bucket}/${path}`,{method:'POST',headers:{...auth,'content-type':'image/jpeg','x-upsert':'false'},body:photoBytes[i]});if(!result.ok)throw new Error('Photo upload failed');uploaded.push(path);}

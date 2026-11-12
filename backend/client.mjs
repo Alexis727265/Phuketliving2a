@@ -21,6 +21,7 @@ export function createClient({ url, publicKey, anonToken, fetch: send = globalTh
       session=candidate;return {email:candidate.user.email};
     },
     logout(){session=null;},
+    async changePassword(password){if(typeof password!=='string'||password.length<12)throw new Error('Use at least 12 characters');return call('/auth/v1/user',{method:'PUT',token:adminToken(),...json({password})});},
     async pending(){return call('/rest/v1/pl2_properties?select=*&status=eq.pending&order=created_at.desc',{token:adminToken()});},
     async messages(){return call('/rest/v1/pl2_messages?select=*&order=created_at.desc',{token:adminToken()});},
     async contacts(id){return call(`/rest/v1/pl2_property_contacts?select=*&property_id=eq.${encodeURIComponent(id)}`,{token:adminToken()});},
