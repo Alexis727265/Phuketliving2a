@@ -12,6 +12,7 @@ export function createClient({ url, publicKey, anonToken, fetch: send = globalTh
   const adminToken=()=>{if(!session)throw new Error('Please sign in first');return session.access_token};
   return {
     async listProperties(){ return call('/rest/v1/pl2_properties?select=*&status=eq.published&order=created_at.desc'); },
+    async getProperty(id){const rows=await call('/rest/v1/pl2_properties?select=*&status=eq.published&id=eq.'+encodeURIComponent(id)+'&limit=1');return rows?.[0]||null;},
     async sendForm(form){return call('/functions/v1/pl2-submit',{method:'POST',body:form});},
     async login(email,password){
       const candidate=await call('/auth/v1/token?grant_type=password',{method:'POST',...json({email,password})});
