@@ -23,3 +23,27 @@ test('rejects accounts without admin membership',async()=>{
 test('shows Supabase invalid-password errors clearly and normalizes email',async()=>{let body;const client=createClient({url:'https://example.test',publicKey:'public',anonToken:'anon',fetch:async(url,options)=>{body=JSON.parse(options.body);return Response.json({code:400,msg:'Invalid login credentials'},{status:400});}});await assert.rejects(client.login(' Admin@Example.com ','password with spaces '),/Email or password is incorrect/);assert.equal(body.email,'admin@example.com');assert.equal(body.password,'password with spaces ');});
 test('recovery verifies user and admin membership before changing password',async()=>{let updates=0;const send=async(url,options)=>{if(url.endsWith('/auth/v1/user')&&options.method==='GET')return Response.json({id:'owner'});if(url.includes('/pl2_admins'))return Response.json([{user_id:'owner'}]);if(options.method==='PUT'){updates++;assert.equal(options.headers.authorization,'Bearer recovery-token');return Response.json({id:'owner'});}throw Error('Unexpected call')};const client=createClient({url:'https://example.test',publicKey:'public',anonToken:'anon',fetch:send});await assert.rejects(client.changePassword('a-long-new-password'),/sign in/);await client.acceptRecovery('recovery-token');await client.changePassword('a-long-new-password');assert.equal(updates,1);});
 test('recovery refuses non-administrators',async()=>{const send=async url=>url.includes('/pl2_admins')?Response.json([]):Response.json({id:'not-admin'});const client=createClient({url:'https://example.test',publicKey:'public',anonToken:'anon',fetch:send});await assert.rejects(client.acceptRecovery('token'),/not an administrator/);await assert.rejects(client.changePassword('a-long-new-password'),/sign in/);});
+
+const listingId='12345678-1234-4234-8234-123456789abc';
+const edited={title:'Updated villa',location:'Bang Tao',description:'Updated description',offer:'rent',property_type:'Villa',price_period:'month',status:'published',price:'90000',bedrooms:'3',bathrooms:'2',size_sqm:'250',features:['Pool','Sea view']};
+function managementClient({rows=[{id:listingId,image_paths:[listingId+'/1.jpg']}],storageFails=false}={}){
+ const calls=[];const client=createClient({url:'https://example.test',publicKey:'public',anonToken:'anon',fetch:async(url,options)=>{
+  calls.push({url,options});if(url.includes('/auth/v1/'))return Response.json({access_token:'admin-token',user:{id:'admin'}});if(url.includes('/pl2_admins'))return Response.json([{user_id:'admin'}]);if(url.includes('/storage/'))return storageFails?Response.json({message:'Storage unavailable'},{status:503}):Response.json([]);return Response.json(rows);
+ }});return {client,calls};
+}
+test('listing management requires sign in, targets a single UUID and preserves photos',async()=>{
+ const {client,calls}=managementClient();await assert.rejects(client.allProperties(),/sign in/);await assert.rejects(client.updateProperty(listingId,edited),/sign in/);await assert.rejects(client.deleteProperty(listingId),/sign in/);
+ await client.login('admin@example.com','test');await client.allProperties();assert.ok(!calls.at(-1).url.includes('status=eq.pending'));
+ await client.updateProperty(listingId,{...edited,id:'other',image_paths:[],created_at:'fake'});const request=calls.at(-1);assert.equal(request.options.method,'PATCH');assert.equal(request.options.headers.authorization,'Bearer admin-token');assert.equal(request.options.headers.Prefer,'return=representation');assert.ok(request.url.endsWith('id=eq.'+listingId));const payload=JSON.parse(request.options.body);assert.equal(payload.price,90000);assert.equal(payload.size_sqm,250);assert.ok(!('image_paths' in payload));assert.ok(!('id' in payload));
+ const count=calls.length;await assert.rejects(client.deleteProperty('x&or=(id.not.is.null)'),/Invalid listing/);assert.equal(calls.length,count);
+});
+test('editing rejects invalid data before sending a mutation',async()=>{
+ const {client,calls}=managementClient();await client.login('admin@example.com','test');for(const change of [{price:-1},{price:Infinity},{bedrooms:1.5},{bathrooms:51},{size_sqm:0},{status:'anything'},{description:''},{features:['']},{property_type:'Unknown'}])await assert.rejects(client.updateProperty(listingId,{...edited,...change}));assert.equal(calls.length,2);
+});
+test('missing or unauthorized rows are never reported as saved or deleted',async()=>{
+ const {client,calls}=managementClient({rows:[]});await client.login('admin@example.com','test');await assert.rejects(client.updateProperty(listingId,edited),/not found/);await assert.rejects(client.deleteProperty(listingId),/not found/);assert.ok(!calls.some(x=>x.url.includes('/storage/')));
+});
+test('deletion uses returned image paths after database confirmation and reports cleanup failures',async()=>{
+ for(const storageFails of [false,true]){const {client,calls}=managementClient({storageFails});await client.login('admin@example.com','test');const result=await client.deleteProperty(listingId);assert.equal(result.cleanupFailed,storageFails);assert.equal(calls.at(-2).options.method,'DELETE');assert.deepEqual(JSON.parse(calls.at(-1).options.body),{prefixes:[listingId+'/1.jpg']});}
+ const {client,calls}=managementClient({rows:[{id:listingId,image_paths:['another-listing/1.jpg']}]});await client.login('admin@example.com','test');assert.equal((await client.deleteProperty(listingId)).cleanupFailed,true);assert.ok(!calls.some(x=>x.url.includes('/storage/')));
+});
