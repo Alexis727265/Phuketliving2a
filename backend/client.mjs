@@ -28,6 +28,7 @@ export function createClient({ url, publicKey, anonToken, fetch: send = globalTh
     async messages(){return call('/rest/v1/pl2_messages?select=*&order=created_at.desc',{token:adminToken()});},
     async contacts(id){return call(`/rest/v1/pl2_property_contacts?select=*&property_id=eq.${encodeURIComponent(id)}`,{token:adminToken()});},
     async setStatus(id,status){if(!['published','rejected'].includes(status))throw new Error('Invalid status');return call(`/rest/v1/pl2_properties?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',token:adminToken(),...json({status})});},
-    async passwordReset(email){return call('/auth/v1/recover',{method:'POST',...json({email})});}
+    async acceptRecovery(token){const user=await call('/auth/v1/user',{token});if(!user?.id)throw new Error('Invalid recovery link');const rows=await call('/rest/v1/pl2_admins?select=user_id&user_id=eq.'+encodeURIComponent(user.id),{token});if(!rows?.length)throw new Error('This account is not an administrator');session={access_token:token,user};},
+    async passwordReset(email,redirect){const endpoint='/auth/v1/recover'+(redirect?'?redirect_to='+encodeURIComponent(redirect):'');return call(endpoint,{method:'POST',...json({email:email.trim().toLowerCase()})});}
   };
 }
