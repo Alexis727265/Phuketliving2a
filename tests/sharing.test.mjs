@@ -1,0 +1,7 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {propertyLink,listingIdFromUrl,shareListing} from '../sharing.mjs';
+const p={id:'01234567-89ab-4cde-8f01-23456789abcd',title:'Surin condo'};
+test('direct listing link omits unrelated page state',()=>{const link=propertyLink(p.id,'https://example.com/?old=1#contact');assert.equal(link,'https://example.com/?property='+p.id);assert.equal(listingIdFromUrl(link),p.id);assert.equal(listingIdFromUrl('https://example.com/?property=invalid'),null)});
+test('uses native sharing',async()=>{let data;const r=await shareListing(p,'https://example.com',{share:async x=>{data=x}});assert.equal(r.status,'shared');assert.equal(data.url,r.link)});
+test('copies when native sharing is unavailable or denied',async()=>{for(const share of [undefined,async()=>{throw Error('Denied')}]){let value;const r=await shareListing(p,'https://example.com',{share,clipboard:{writeText:async x=>{value=x}}});assert.equal(r.status,'copied');assert.equal(value,r.link)}});
+test('cancellation does not unexpectedly copy',async()=>{let copied=false;const r=await shareListing(p,'https://example.com',{share:async()=>{throw {name:'AbortError'}},clipboard:{writeText:async()=>{copied=true}}});assert.equal(r.status,'cancelled');assert.equal(copied,false)});
+test('offers manual copy when clipboard blocked',async()=>{const r=await shareListing(p,'https://example.com',{clipboard:{writeText:async()=>{throw Error('Denied')}}});assert.equal(r.status,'manual')});
