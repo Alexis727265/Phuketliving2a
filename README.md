@@ -57,6 +57,10 @@ New objects use unique names. The row saves only after uploads finish. Old objec
 
 `node build.mjs` runs the existing backend, image-sizing and sharing tests plus the redesign's search/metadata/security tests. GitHub Actions runs this build on pushes and pull requests.
 
-Live public checks cover published reads, filtering/counts, property HTTP responses, old-link redirects, image URLs, sitemap, robots, unauthorized property edits/private reads, and mobile/desktop UI. Full authenticated create/edit/upload/delete browser checks require the existing administrator to sign in. No demo data was inserted into production and no real property was deleted for testing.
+Live public checks cover published reads, filtering/counts, property HTTP responses, old-link redirects, image URLs, sitemap, robots, unauthorized property edits/private reads, and mobile/desktop UI. The existing administrator login, membership and access to all 27 records were verified through the real authentication API. The dedicated hero upload through authenticated Storage was also verified. Full create/edit/delete browser checks remain unperformed; no real listing was changed or deleted for testing. No demo data was inserted into production and no real property was deleted for testing.
 
 Supabase's existing advisory notes that leaked-password protection is disabled. It also reports no policies on the service-only rate-limit table; that table intentionally has no browser access. The redesign does not weaken either table permissions or admin membership.
+
+## Homepage hero
+
+The homepage uses one original pool-facing Villa Jardin photograph, sourced from https://villajardin.lamaisoncoral.com/images/cover.jpg and stored as the dedicated branding object `branding/pool-villa-hero-20261117.jpg` in the existing bucket. It is 1500×1000, has no advertising text or collage, and is independent of property-card cover selection. It does not modify any listing record or gallery. Desktop and mobile focal positions retain the pool and villa in view.
