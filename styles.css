@@ -12,3 +12,4 @@
 /* Keep the water and pool-facing facade visible in the dedicated hero photograph. */
 .hero-photo-element{object-position:52% 68%}.hero-shade{background:linear-gradient(90deg,rgba(2,29,31,.75),rgba(2,29,31,.3) 55%,rgba(2,29,31,.08)),linear-gradient(0deg,#02292b55,transparent 55%)}
 @media(max-width:600px){.hero-photo-element{object-position:65% 58%}.hero-shade{background:linear-gradient(90deg,rgba(2,29,31,.66),rgba(2,29,31,.18)),linear-gradient(0deg,#02292b44,transparent 60%)}}
+.collection-note{font-size:10px;line-height:1.8;color:var(--muted);margin:22px 0 0}.footer-legal{display:flex;gap:20px}.photo-credit{font-size:12px;border-bottom:1px solid var(--line);padding:12px 0}.photo-credit a{text-decoration:underline;text-underline-offset:3px}.area-caption{text-transform:uppercase;letter-spacing:.08em}.collection-card img{object-position:center}.area-card img{object-position:center}

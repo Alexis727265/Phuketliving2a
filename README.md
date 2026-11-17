@@ -33,7 +33,7 @@ The current Worker serves its small static modules and HTML directly. Requests u
 
 The additive SQL in `migrations/20261117_coastal_details.sql` adds optional `featured`, `details` and `updated_at` fields, an update timestamp trigger, administrator photo insertion and contact insertion policies, the matching contact privilege, and a search index. It does not modify existing listing values, IDs, contacts or image paths. Do not reapply the policy/trigger creation blindly; these changes have already been applied to the production project.
 
-Administrator access requires both a valid Auth session and membership in `pl2_admins`; database and storage RLS independently enforce it. No public administrator registration is exposed. Sessions remain in memory and refresh during use; a full reload requires sign-in again. Logout also calls Supabase to revoke the current refresh session. Editing uses `updated_at` to prevent silently overwriting a concurrent edit.
+Administrator access requires both a valid Auth session and membership in `pl2_admins`; database and storage RLS independently enforce it. No public administrator registration is exposed. Sessions refresh during use and are retained in tab-scoped sessionStorage. After a reload, the Auth user and admin membership are reverified before restoring dashboard access. Logout clears the cached session. Logout also calls Supabase to revoke the current refresh session. Editing uses `updated_at` to prevent silently overwriting a concurrent edit.
 
 ## Listings, search and sharing
 
@@ -64,3 +64,5 @@ Supabase's existing advisory notes that leaked-password protection is disabled. 
 ## Homepage hero
 
 The homepage uses one original pool-facing Villa Jardin photograph, sourced from https://villajardin.lamaisoncoral.com/images/cover.jpg and stored as the dedicated branding object `branding/pool-villa-hero-20261117.jpg` in the existing bucket. It is 1500×1000, has no advertising text or collage, and is independent of property-card cover selection. It does not modify any listing record or gallery. Desktop and mobile focal positions retain the pool and villa in view.
+
+Area discovery uses location-verified Wikimedia Commons photos; lifestyle collections use Pexels photography. `discovery.mjs` records original sources and licenses, surfaced through Photo credits. These promotional images are independent of listing galleries. Admin email is prefilled; pasted passwords have surrounding whitespace/invisible copy characters removed.

@@ -15,10 +15,13 @@ export function buildSearch(params={}) {
  q.set('order',params.sort==='price-asc'?'price.asc,id.asc':params.sort==='price-desc'?'price.desc,id.asc':'created_at.desc,id.asc');
  q.set('limit',String(params.limit||12));q.set('offset',String(((params.page||1)-1)*(params.limit||12)));return q;
 }
-export function createApi({fetch:send=globalThis.fetch}={}) {
+export function createApi({fetch:send=globalThis.fetch,sessionStore}={}) {
+ try{sessionStore??=globalThis.sessionStorage;}catch{}
+ const sessionKey='phuket-living-admin-session-v1';
+ const persist=()=>{try{if(session)sessionStore?.setItem(sessionKey,JSON.stringify(session));else sessionStore?.removeItem(sessionKey);}catch{}};
  let session=null,refreshPromise=null;
  const json=data=>({body:JSON.stringify(data),headers:{'content-type':'application/json'}});
- async function refresh(){if(!refreshPromise)refreshPromise=(async()=>{const res=await send(config.url+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:config.publicKey,'content-type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});const data=await res.json();if(!res.ok){session=null;throw Error('Your session has expired. Please sign in again.');}session={...data,expires_at:Math.floor(Date.now()/1000)+data.expires_in};})().finally(()=>refreshPromise=null);return refreshPromise;}
+ async function refresh(){if(!refreshPromise)refreshPromise=(async()=>{const res=await send(config.url+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:config.publicKey,'content-type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});const data=await res.json();if(!res.ok){session=null;persist();throw Error('Your session has expired. Please sign in again.');}session={...data,expires_at:Math.floor(Date.now()/1000)+data.expires_in};persist();})().finally(()=>refreshPromise=null);return refreshPromise;}
  async function call(path,{method='GET',body,headers={},admin=false,rawToken,signal}={}){
   if(admin){if(!session)throw Error('Please sign in first.');if(session.refresh_token&&session.expires_at<Date.now()/1000+90)await refresh();}
   const token=rawToken||(admin?session.access_token:config.anonToken);
@@ -44,8 +47,9 @@ export function createApi({fetch:send=globalThis.fetch}={}) {
   async facets(){return db('/rest/v1/pl2_properties?select=id,location,property_type,features,price,price_period,details&status=eq.published&limit=1000');},
   async highlights(){return db('/rest/v1/pl2_properties?select=*&status=eq.published&order=featured.desc,created_at.desc&limit=12');},
   async get(id,{admin=false}={}){return (await db('/rest/v1/pl2_properties?select=*&id=eq.'+validId(id)+(admin?'':'&status=eq.published')+'&limit=1',{admin}))?.[0]||null;},
-  async login(email,password){const candidate=await db('/auth/v1/token?grant_type=password',{method:'POST',...json({email:email.trim().toLowerCase(),password})});if(!candidate?.access_token||!candidate?.user?.id)throw Error('Unable to sign in');const rows=await db('/rest/v1/pl2_admins?select=user_id&user_id=eq.'+encodeURIComponent(candidate.user.id),{rawToken:candidate.access_token});if(!rows?.length){await db('/auth/v1/logout',{method:'POST',rawToken:candidate.access_token}).catch(()=>{});throw Error('This account is not authorized to manage properties.');}session={...candidate,expires_at:Date.now()/1000+candidate.expires_in};return candidate.user;},
-  async logout(){const token=session?.access_token;session=null;if(token)await db('/auth/v1/logout?scope=local',{method:'POST',rawToken:token});},
+  async login(email,password){const candidate=await db('/auth/v1/token?grant_type=password',{method:'POST',...json({email:email.trim().toLowerCase(),password})});if(!candidate?.access_token||!candidate?.user?.id)throw Error('Unable to sign in');const rows=await db('/rest/v1/pl2_admins?select=user_id&user_id=eq.'+encodeURIComponent(candidate.user.id),{rawToken:candidate.access_token});if(!rows?.length){await db('/auth/v1/logout',{method:'POST',rawToken:candidate.access_token}).catch(()=>{});throw Error('This account is not authorized to manage properties.');}session={...candidate,expires_at:Date.now()/1000+candidate.expires_in};persist();return candidate.user;},
+  async logout(){const token=session?.access_token;session=null;persist();if(token)await db('/auth/v1/logout?scope=local',{method:'POST',rawToken:token});},
+  async restoreSession(){try{const cached=JSON.parse(sessionStore?.getItem(sessionKey)||'null');if(!cached?.access_token||!cached?.refresh_token)return false;session=cached;if(session.expires_at<Date.now()/1000+90)await refresh();const user=await db('/auth/v1/user',{rawToken:session.access_token});const rows=await db('/rest/v1/pl2_admins?select=user_id&user_id=eq.'+encodeURIComponent(user.id),{rawToken:session.access_token});if(!rows?.length)throw Error('Administrator access required');session.user=user;persist();return true;}catch{session=null;persist();return false;}},
   isLoggedIn(){return !!session;},
   async all(){return db('/rest/v1/pl2_properties?select=*&order=updated_at.desc&limit=1000',{admin:true});},
   async messages(){return db('/rest/v1/pl2_messages?select=*&order=created_at.desc&limit=100',{admin:true});},
