@@ -18,4 +18,18 @@ export function syncFavorites(){try{localStorage.setItem('phuket-living-saved',J
 export function favoriteButton(p,cls='favorite'){return `<button class="icon-btn ${cls}" type="button" data-favorite="${p.id}" aria-label="Save property" aria-pressed="${favorites.has(p.id)}">${favorites.has(p.id)?'♥':'♡'}</button>`;}
 export function card(p,i=0){const imgs=p.image_paths||[];return `<article class="property-card"><a class="card-media" href="/property/${p.id}" data-property="${p.id}" aria-label="View ${esc(cleanTitle(p.title))}">${imgs[0]?`<img loading="lazy" decoding="async" src="${esc(imageUrl(imgs[0]))}" alt="${esc(cleanTitle(p.title))}" width="640" height="450">`:''}${imgs[1]?`<img class="second-photo" loading="lazy" decoding="async" src="${esc(imageUrl(imgs[1]))}" alt="Another view of ${esc(p.property_type)} in ${esc(p.location)}" width="640" height="450">`:''}<span class="card-tag">${p.featured?'FEATURED':p.offer==='sale'?'FOR SALE':p.property_type.toUpperCase()}</span></a>${favoriteButton(p)}<div class="card-body"><p class="card-location">${esc(p.location)} · ${p.offer==='sale'?'FOR SALE':'FOR RENT'}</p><a href="/property/${p.id}" data-property="${p.id}"><h3 class="card-title">${esc(cleanTitle(p.title))}</h3></a><div class="card-facts"><span>${p.bedrooms===0?'Studio':p.bedrooms+' bedrooms'}</span><span>${p.bathrooms} bathrooms</span>${p.size_sqm?`<span>${Number(p.size_sqm).toLocaleString()} m²</span>`:''}</div><div class="card-footer"><strong class="card-price">${price(p)} <small>${period(p)}</small></strong><button class="icon-btn card-share" type="button" data-share="${p.id}" aria-label="Share ${esc(cleanTitle(p.title))}"><svg class="arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></button></div></div></article>`;}
 export async function compressImage(file){if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw Error('Select JPG, PNG or WebP photos.');if(file.size>40e6)throw Error('Choose photos smaller than 40 MB.');const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});try{const scale=Math.min(1,1920/Math.max(bitmap.width,bitmap.height),1080/Math.min(bitmap.width,bitmap.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);for(const quality of [.88,.78,.65]){const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Could not prepare this photo')),'image/jpeg',quality));if(blob.size<3e6)return blob;}throw Error('This photo is too large after resizing.');}finally{bitmap.close();}}
-let observer;export function observe(){if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;if(!observer){document.body.classList.add('motion-ready');observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in-view');observer.unobserve(e.target);}}),{threshold:.06});}$$('.reveal:not(.in-view)').forEach(x=>observer.observe(x));}
+let observer;
+export function observe() {
+  if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!observer) {
+    document.body.classList.add('motion-ready');
+    observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add('in-view');
+        observer.unobserve(entry.target);
+      }
+    }, { threshold: .06 });
+  }
+  $$('.reveal:not(.in-view)').forEach(element => observer.observe(element));
+}
