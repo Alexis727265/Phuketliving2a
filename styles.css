@@ -60,8 +60,11 @@
   .hero-bottom { font-size: 10px; }
   .hero-orbit { letter-spacing: .12em; }
   .hero-credit { font-size: 10px; }
+  .search-bar { padding: 16px 12px; }
+  .search-bar label { padding-right: 6px; }
+  .search-bar label:nth-child(2) { padding-left: 9px; }
   .search-bar .btn { font-size: 15px; }
-  .search-bar select { padding-right: 8px; }
+  .search-bar select { padding-right: 0; }
   .list-view .card-title { padding-right: 27px; }
   .mobile-inquiry .btn { padding-inline: 12px; }
 }
@@ -72,4 +75,11 @@
   .area-card > span { right: 11px; bottom: 15px; }
   .results-toolbar > div { gap: 4px; }
   .results-toolbar select { padding-right: 0; }
+}
+
+@media (max-width: 350px) {
+  .search-bar { grid-template-columns: 1fr; row-gap: 8px; }
+  .search-bar label,
+  .search-bar label:nth-child(2) { border: 0; padding-inline: 8px; }
+  .search-bar .btn { margin-top: 5px; }
 }
