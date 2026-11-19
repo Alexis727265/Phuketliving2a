@@ -6,10 +6,11 @@ The existing Netlify deployment and its `main` branch remain in place. The redes
 
 ## Run and deploy
 
-Requires Node 22+ (Node 24 recommended). No runtime npm dependencies.
+Requires Node 22+ (Node 24 recommended).
 
 ```sh
-node build.mjs
+npm ci
+npm run build
 ```
 
 This runs the automated suite, emits Netlify-compatible files in `dist/`, and creates the Cloudflare Worker modules in `release/`. For Cloudflare deploy using the official Wrangler CLI, authenticated to the intended account:
@@ -29,6 +30,7 @@ The current Worker serves its small static modules and HTML directly. Requests u
 - `pl2_property_contacts`: private contacts, available only to administrators.
 - `pl2_messages`: private inquiries.
 - `phuketliving2-images`: existing public JPEG image bucket, 3 MB maximum per object.
+- `phuketliving2-videos`: private MP4 bucket with a 50 MB file limit. The Worker can play only the video attached to a published listing.
 - `pl2-submit`: existing validated, rate-limited owner/message submission Edge Function.
 
 The additive SQL in `migrations/20261117_coastal_details.sql` adds optional `featured`, `details` and `updated_at` fields, an update timestamp trigger, administrator photo insertion and contact insertion policies, the matching contact privilege, and a search index. It does not modify existing listing values, IDs, contacts or image paths. Do not reapply the policy/trigger creation blindly; these changes have already been applied to the production project.
@@ -47,9 +49,11 @@ Administrator access requires both a valid Auth session and membership in `pl2_a
 - WhatsApp inquiries include the listing title, reference, stable URL and optional dates/guests. Dates are an inquiry preference, not an availability/calendar filter. Nothing is instantly bookable.
 - Native share is used when available, with clipboard and manual-copy fallbacks.
 
-## Admin photo workflow
+## Admin photo and video workflow
 
 Photos are converted to JPEG and resized without upscaling to fit 1920×1080 landscape or 1080×1920 portrait. At most ten images can be saved. Desktop drop support, Android-compatible selection, duplicate selection detection, cover selection, drag reordering and accessible reorder buttons are included. Upload progress is per image.
+
+Admins can attach one optional MP4 under **Photos & video**. Uploads resume after transient network failures, and previews work for drafts. `migrations/20261119034325_listing_videos.sql` adds the video field, bucket and access policies.
 
 New objects use unique names. The row saves only after uploads finish. Old objects are removed only after the database save succeeds and only when they are no longer referenced by the current listing. Listing deletion requires an explicit confirmation; cleanup failures are reported. Upload errors keep selections available for retry. Unsaved changes warn before closing/reloading.
 

@@ -13,3 +13,42 @@ test('sitemap includes only the published response, and script data is escaped',
 test('restored admin sessions verify the real user and membership before access',async()=>{const values=new Map();const sessionStore={getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};let member=true;const send=async(url,opts)=>{if(url.includes('grant_type=password'))return Response.json({access_token:'admin-token',refresh_token:'refresh-token',expires_in:3600,user:{id,email:'owner@example.com'}});if(url.endsWith('/auth/v1/user'))return Response.json({id,email:'owner@example.com'});if(url.includes('pl2_admins'))return Response.json(member?[{user_id:id}]:[]);if(url.includes('logout'))return new Response(null,{status:204});return Response.json([]);};const first=createApi({fetch:send,sessionStore});await first.login('owner@example.com','password');const restored=createApi({fetch:send,sessionStore});assert.equal(restored.isLoggedIn(),false);assert.equal(await restored.restoreSession(),true);await restored.all();member=false;const rejected=createApi({fetch:send,sessionStore});assert.equal(await rejected.restoreSession(),false);assert.equal(rejected.isLoggedIn(),false);assert.equal(values.size,0);});
 
 test('login removes surrounding copy whitespace and invisible formatting without changing case',async()=>{let posted;const api=createApi({fetch:async(url,opts)=>{if(url.includes('grant_type=password')){posted=JSON.parse(opts.body);return Response.json({access_token:'token',user:{id},expires_in:3600});}return Response.json([{user_id:id}]);}});await api.login(' OWNER@EXAMPLE.COM ','\n\u200bExactPassword! \n');assert.deepEqual(posted,{email:'owner@example.com',password:'ExactPassword!'});});
+
+test('public video requests forward byte ranges and deny unavailable objects', async () => {
+  const videoPath = id + '/cd8db19f-f82e-4df8-b5fe-405c405ce5f5.mp4';
+  const url = 'https://example.com/videos/' + videoPath;
+  const worker = makeWorker({});
+  const env = {TEST_FETCH: async (path, options) => {
+    assert.match(path, /\/object\/authenticated\/phuketliving2-videos\//);
+    assert.match(options.headers.authorization, /^Bearer /);
+    assert.equal(options.headers.range, 'bytes=1-3');
+    return new Response('abc', {status:206, headers:{'content-range':'bytes 1-3/10','accept-ranges':'bytes'}});
+  }};
+  const range = await worker.fetch(new Request(url,{headers:{range:'bytes=1-3'}}),env);
+  assert.equal(range.status,206);
+  assert.equal(range.headers.get('content-range'),'bytes 1-3/10');
+  assert.equal(range.headers.get('content-type'),'video/mp4');
+  assert.match(range.headers.get('cache-control'), /no-store/);
+  assert.equal(await range.text(),'abc');
+  const unavailable = await worker.fetch(new Request(url),{TEST_FETCH:async()=>new Response(null,{status:403})});
+  assert.equal(unavailable.status,404);
+  const malformed = await worker.fetch(new Request('https://example.com/videos/not-a-video'),env);
+  assert.equal(malformed.status,404);
+});
+
+test('video cleanup keeps the current attachment and rejects paths from other listings', async () => {
+  const attached = id + '/cd8db19f-f82e-4df8-b5fe-405c405ce5f5.mp4';
+  const replaced = id + '/3d5ec584-ecef-4362-bc6c-a483616d010f.mp4';
+  const deletions = [];
+  const api = createApi({fetch:async (url, options)=>{
+    if(url.includes('grant_type=password'))return Response.json({access_token:'x',user:{id},expires_in:3600});
+    if(url.includes('pl2_admins'))return Response.json([{user_id:id}]);
+    if(url.includes('pl2_properties'))return Response.json([{id,video_path:attached}]);
+    if(options.method==='DELETE')deletions.push(JSON.parse(options.body));
+    return new Response(null,{status:204});
+  }});
+  await api.login('owner@example.com','password');
+  await api.cleanVideos(id,[attached,replaced]);
+  await assert.rejects(api.cleanVideos(id,[replaced.replace(id,'3d5ec584-ecef-4362-bc6c-a483616d010f')]),/Unsafe video path/);
+  assert.deepEqual(deletions,[{prefixes:[replaced]}]);
+});

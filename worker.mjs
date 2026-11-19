@@ -1,13 +1,45 @@
 import {priceOnRequest,displayPrice,displayPeriod} from './pricing.mjs';
 import {config} from './config.mjs';
+import {listingVideoUrl, validVideoPath, videoBucket} from './video.mjs';
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clean=value=>String(value||'').replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu,'').trim();
-const headers={'x-content-type-options':'nosniff','referrer-policy':'strict-origin-when-cross-origin','x-frame-options':'DENY','permissions-policy':'camera=(),microphone=(),geolocation=()','strict-transport-security':'max-age=31536000; includeSubDomains','content-security-policy':`default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: ${config.url}; connect-src 'self' ${config.url} https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`};
+const headers={'x-content-type-options':'nosniff','referrer-policy':'strict-origin-when-cross-origin','x-frame-options':'DENY','permissions-policy':'camera=(),microphone=(),geolocation=()','strict-transport-security':'max-age=31536000; includeSubDomains','content-security-policy':`default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: ${config.url}; media-src 'self' blob: ${config.url}; connect-src 'self' ${config.url} ${config.url.replace(/\.supabase\.co$/, '.storage.supabase.co')} https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`};
 const analyticsBeacon = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"c00182d0464040bb825fc13d78cca4ab"}'></script>`;
 const mime={html:'text/html; charset=utf-8',css:'text/css; charset=utf-8',mjs:'text/javascript; charset=utf-8',js:'text/javascript; charset=utf-8',svg:'image/svg+xml',jpg:'image/jpeg',txt:'text/plain; charset=utf-8',json:'application/json',xml:'application/xml'};
 async function query(path,send){const res=await send(config.url+'/rest/v1/pl2_properties?'+path,{headers:{apikey:config.publicKey,Authorization:'Bearer '+config.anonToken}});if(!res.ok)throw Error('Property service unavailable');return res.json();}
 function image(path){return path?config.url+'/storage/v1/object/public/'+config.bucket+'/'+path.split('/').map(encodeURIComponent).join('/'):'';}
 function meta(html,{title,description,url,photo}){return html.replace(/<title>[^<]*<\/title>/,`<title>${escapeHTML(title)}</title>`).replace(/<meta name="description" content="[^"]*">/,`<meta name="description" content="${escapeHTML(description)}">`).replace(/<meta property="og:title" content="[^"]*">/,`<meta property="og:title" content="${escapeHTML(title)}">`).replace(/<meta property="og:description" content="[^"]*">/,`<meta property="og:description" content="${escapeHTML(description)}">`).replace('</head>',`<link rel="canonical" href="${escapeHTML(url)}"><meta property="og:url" content="${escapeHTML(url)}"><meta property="og:site_name" content="Phuket Living"><meta name="twitter:card" content="summary_large_image">${photo?`<meta property="og:image" content="${escapeHTML(photo)}"><meta name="twitter:image" content="${escapeHTML(photo)}">`:''}</head>`);}
+async function serveVideo(request, path, send) {
+  const responseHeaders = {...headers, 'cache-control': 'private, no-store'};
+  const error = status => new Response(null, {status, headers: responseHeaders});
+  if (!validVideoPath(path)) return error(404);
+
+  const upstreamHeaders = {apikey: config.publicKey, authorization: 'Bearer ' + config.anonToken};
+  const range = request.headers.get('range');
+  if (range) upstreamHeaders.range = range;
+  try {
+    const upstream = await send(`${config.url}/storage/v1/object/authenticated/${videoBucket}/${path}`, {
+      method: request.method, headers: upstreamHeaders, cache: 'no-store',
+    });
+    if (![200, 206, 416].includes(upstream.status)) {
+      await upstream.body?.cancel();
+      return error(upstream.status >= 500 ? 502 : 404);
+    }
+    for (const name of ['content-length', 'content-range', 'accept-ranges']) {
+      if (upstream.headers.has(name) && (name !== 'content-length' || upstream.status !== 416)) {
+        responseHeaders[name] = upstream.headers.get(name);
+      }
+    }
+    responseHeaders['content-type'] = 'video/mp4';
+    if (request.method === 'HEAD' || upstream.status === 416) {
+      await upstream.body?.cancel();
+      return new Response(null, {status: upstream.status, headers: responseHeaders});
+    }
+    return new Response(upstream.body, {status: upstream.status, headers: responseHeaders});
+  } catch {
+    return error(502);
+  }
+}
 export function makeWorker(assets){return {async fetch(request,env,ctx){const u=new URL(request.url);if(!['GET','HEAD'].includes(request.method))return new Response('Method not allowed',{status:405,headers:{...headers,Allow:'GET, HEAD'}});const send=env?.TEST_FETCH||fetch;const respond = (body, status = 200, type = 'text/html; charset=utf-8', extra = {}) => {
   if (status === 200 && type === mime.html && u.pathname !== '/admin') {
     body = body.replace('</head>', analyticsBeacon + '</head>');
@@ -16,6 +48,7 @@ export function makeWorker(assets){return {async fetch(request,env,ctx){const u=
     status, headers: { ...headers, 'content-type': type, 'cache-control': 'no-cache', ...extra },
   });
 };
+if(u.pathname.startsWith('/videos/'))return serveVideo(request,u.pathname.slice('/videos/'.length),send);
 if(u.pathname==='/robots.txt')return respond(`User-agent: *\nAllow: /\nDisallow: /admin\nSitemap: ${u.origin}/sitemap.xml\n`,200,mime.txt);
 if(u.pathname==='/sitemap.xml'){try{const rows=await query('select=id,updated_at&status=eq.published&order=created_at.desc&limit=1000',send);const xml=`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${escapeHTML(u.origin)}/</loc></url>${rows.map(p=>`<url><loc>${escapeHTML(u.origin)}/property/${p.id}</loc>${p.updated_at?`<lastmod>${escapeHTML(p.updated_at.slice(0,10))}</lastmod>`:''}</url>`).join('')}</urlset>`;return respond(xml,200,mime.xml);}catch{return respond('Sitemap temporarily unavailable',503,mime.txt);}}
 const entry=assets[u.pathname];if(entry&&u.pathname!=='/index.html'&&u.pathname!=='/')return respond(entry,200,mime[u.pathname.split('.').at(-1)]||mime.txt,{'cache-control':'public,max-age=0,must-revalidate'});
@@ -25,7 +58,7 @@ if(pathId){try{const p=(await query('select=*&status=eq.published&id=eq.'+encode
 const title=clean(p.title)+' | Phuket Living',description=p.description.slice(0,160),photo=image(p.image_paths?.[0]);let rendered=meta(html,{title,description,url:u.origin+'/property/'+p.id,photo});const structured={'@context':'https://schema.org','@type':'RealEstateListing',name:clean(p.title),url:u.origin+'/property/'+p.id,description:p.description,identifier:p.id,image:(p.image_paths||[]).map(image),datePosted:p.created_at,mainEntity:{'@type':p.property_type==='Apartment'||p.property_type==='Condo'?'Apartment':'Accommodation',name:clean(p.title),numberOfBedrooms:p.bedrooms,numberOfBathroomsTotal:p.bathrooms,address:{'@type':'PostalAddress',addressLocality:p.location,addressRegion:'Phuket',addressCountry:'TH'},...(p.size_sqm?{floorSize:{'@type':'QuantitativeValue',value:Number(p.size_sqm),unitCode:'MTK'}}:{})},offers:{'@type':'Offer',price:Number(p.price),priceCurrency:'THB',businessFunction:p.offer==='sale'?'http://purl.org/goodrelations/v1#Sell':'http://purl.org/goodrelations/v1#LeaseOut',priceSpecification:{'@type':'UnitPriceSpecification',price:Number(p.price),priceCurrency:'THB',...(p.price_period==='month'?{unitText:'per month'}:p.price_period==='day'?{unitText:'per night'}:{})}}};
 if(priceOnRequest(p))delete structured.offers;
 // JSON-LD stays inert and cannot close its own script element.
-rendered=rendered.replace('</head>',`<script type="application/ld+json">${JSON.stringify(structured).replace(/</g,'\\u003c')}</script></head>`);const content=`<section id="server-content" class="detail-wrap"><p class="eyebrow">${escapeHTML(p.location)} · ${p.offer==='sale'?'FOR SALE':'FOR RENT'}</p><h1>${escapeHTML(clean(p.title))}</h1>${photo?`<img src="${escapeHTML(photo)}" alt="${escapeHTML(clean(p.title))}" width="1200" height="850" class="preview-cover">`:''}<h2>${escapeHTML(displayPrice(p))} ${displayPeriod(p)}</h2><p>${p.bedrooms} bedrooms · ${p.bathrooms} bathrooms${p.size_sqm?' · '+p.size_sqm+' m²':''}</p><p class="description">${escapeHTML(p.description)}</p><p>${p.features.map(escapeHTML).join(' · ')}</p><a class="btn" href="https://wa.me/66960122530?text=${encodeURIComponent('Hello, I am interested in '+p.title+' (Reference: '+p.id+') '+u.origin+'/property/'+p.id)}">Inquire on WhatsApp ↗</a></section>`;
+rendered=rendered.replace('</head>',`<script type="application/ld+json">${JSON.stringify(structured).replace(/</g,'\\u003c')}</script></head>`);const content=`<section id="server-content" class="detail-wrap"><p class="eyebrow">${escapeHTML(p.location)} · ${p.offer==='sale'?'FOR SALE':'FOR RENT'}</p><h1>${escapeHTML(clean(p.title))}</h1>${photo?`<img src="${escapeHTML(photo)}" alt="${escapeHTML(clean(p.title))}" width="1200" height="850" class="preview-cover">`:''}${listingVideoUrl(p)?`<section class="listing-video"><h2>Property video</h2><video controls playsinline preload="none" src="${listingVideoUrl(p)}" aria-label="Property video"></video></section>`:''}<h2>${escapeHTML(displayPrice(p))} ${displayPeriod(p)}</h2><p>${p.bedrooms} bedrooms · ${p.bathrooms} bathrooms${p.size_sqm?' · '+p.size_sqm+' m²':''}</p><p class="description">${escapeHTML(p.description)}</p><p>${p.features.map(escapeHTML).join(' · ')}</p><a class="btn" href="https://wa.me/66960122530?text=${encodeURIComponent('Hello, I am interested in '+p.title+' (Reference: '+p.id+') '+u.origin+'/property/'+p.id)}">Inquire on WhatsApp ↗</a></section>`;
 rendered=rendered.replace('<div id="home-page">','<div id="home-page" hidden>').replace('<main id="main">','<main id="main">'+content);return respond(rendered);
 }catch{return respond(meta(html,{title:'Phuket Living — Property connection unavailable',description:'Please try again or contact Phuket Living on WhatsApp.',url:u.origin+u.pathname}),503);}}
 if(!['/','/index.html','/admin'].includes(u.pathname))return respond('<!doctype html><title>Page not found | Phuket Living</title><h1>Page not found</h1><a href="/">Return to Phuket Living</a>',404);
