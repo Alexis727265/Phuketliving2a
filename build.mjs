@@ -8,7 +8,7 @@ const tus = (await readFile('node_modules/tus-js-client/dist/tus.min.js', 'utf8'
 const tusModule = `const module = { exports: {} };\nconst exports = module.exports;\n${tus}\nexport const { Upload } = module.exports;\n`;
 assets['/tus.mjs'] = tusModule;
 await writeFile('dist/tus.mjs', tusModule);
-const binaryAssets = ['villa-gateways-hero.jpg', 'brand-mark.png', 'phuket-living-logo.webp'];
+const binaryAssets = ['villa-gateways-hero.jpg', 'brand-mark.png', 'phuket-living-logo.webp', 'phuket-living-share.jpg'];
 const binaryModules = [];
 for (const file of binaryAssets) {
   await copyFile(file, 'dist/' + file);

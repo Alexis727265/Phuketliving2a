@@ -11,14 +11,45 @@ function selectAreas(names) {
   const selected = new Set(names.map(canonicalArea));
   $$('input[name=area]', filterForm).forEach(input => {
     input.checked = selected.has(input.value);
-    if (input.checked) input.closest('details').open = true;
   });
+  syncAreaPicker();
 }
 function restoreFilters(){const p=new URL(location.href).searchParams;for(const key of searchKeys)if(filterForm.elements[key]){const el=filterForm.elements[key];if(el.type==='checkbox')el.checked=p.has(key);else el.value=p.get(key)||'';}selectAreas(p.getAll('area'));$$('input[name=feature]',filterForm).forEach(x=>x.checked=p.getAll('feature').includes(x.value));$('#sort').value=p.get('sort')||'newest';page=Math.max(1,Number(p.get('page'))||1);savedOnly=p.get('saved')==='1';}
-function chips(){const data=new FormData(filterForm);const labels={q:'Search',offer:'Offer',type:'Type',min:'Min ฿',max:'Max ฿',beds:'Bedrooms',baths:'Bathrooms',size:'Min m²',land:'Land m²',guests:'Guests',term:'Term',period:'Price basis',now:'Confirmed available',area:'Area',feature:'Amenity'};const chips=[];for(const [key,value]of data){if(value&&labels[key])chips.push({key,value,label:`${labels[key]}: ${value==='1'&&key==='now'?'yes':value}`});}if(savedOnly)chips.push({key:'saved',value:'1',label:'Saved properties'});$('#active-filters').innerHTML=chips.map((c,i)=>`<button class="chip" data-chip="${i}" aria-label="Remove ${esc(c.label)}">${esc(c.label)} <span>×</span></button>`).join('');$$('[data-chip]').forEach(b=>b.onclick=()=>{const c=chips[Number(b.dataset.chip)];if(c.key==='saved')savedOnly=false;else if(['area','feature'].includes(c.key))$$(`input[name="${c.key}"]`).find(x=>x.value===c.value).checked=false;else {const el=filterForm.elements[c.key];if(el.type==='checkbox')el.checked=false;else el.value='';}page=1;search();});}
-async function search({persist=true}={}){const n=++requestId;abort?.abort();abort=new AbortController();if(persist)persistFilters();chips();$('#result-count').textContent='Finding your next chapter…';$('#results').setAttribute('aria-busy','true');try{const result=await api.search(formParams(),{signal:abort.signal});if(n!==requestId)return;if(!result.rows.length&&page>1){page=1;return search();}result.rows.forEach(p=>cache.set(p.id,p));$('#result-count').textContent=`${result.count} ${result.count===1?'property':'properties'}${savedOnly?' saved':''}`;$('#results').className='property-grid results-grid'+(viewList?' list-view':'');$('#results').innerHTML=result.rows.length?result.rows.map(card).join(''):`<div class="empty"><span class="sun-mark">✳</span><h3>Your place is still out there.</h3><p>${savedOnly?'Tap the heart on any property to save it here.':'Try a wider area, a different budget, or fewer preferences.'}</p><button class="btn outline" id="empty-clear">Explore all properties <svg class="arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></button><p class="empty-contact"><a href="https://wa.me/66960122530">Or tell us what you’re looking for</a></p></div>`;$('#empty-clear')?.addEventListener('click',clearFilters);const total=Math.ceil(result.count/12);const pages=[];for(let i=1;i<=total;i++)if(i===1||i===total||Math.abs(i-page)<3)pages.push(i);$('#pagination').innerHTML=pages.map(i=>`<button ${i===page?'aria-current="page"':''} data-page="${i}" aria-label="Go to page ${i}">${i}</button>`).join('');$$('[data-page]').forEach(b=>b.onclick=()=>{page=Number(b.dataset.page);search();$('#explore').scrollIntoView();});syncFavorites();}catch(error){if(error.name==='AbortError'||n!==requestId)return;$('#result-count').textContent='Unable to load properties';$('#results').innerHTML='<div class="empty"><h3>A little pause in paradise.</h3><p>We couldn’t load the collection. Please check your connection and try again.</p><button id="retry" class="btn">Try again <svg class="arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></button></div>';$('#retry').onclick=()=>search();}finally{if(n===requestId)$('#results').removeAttribute('aria-busy');}}
-function clearFilters(){filterForm.reset();$('#sort').value='newest';savedOnly=false;page=1;$('#budget-output').textContent='Any budget';search();}
-function setFilter(values){filterForm.reset();savedOnly=false;for(const [key,value]of Object.entries(values)){if(key==='area')selectAreas([value]);else if(filterForm.elements[key])filterForm.elements[key].value=value;}page=1;search();$('#explore').scrollIntoView();}
+function chips(){const data=new FormData(filterForm);const labels={q:'Search',offer:'Offer',type:'Type',min:'Min ฿',max:'Max ฿',beds:'Bedrooms',baths:'Bathrooms',size:'Min m²',land:'Land m²',guests:'Guests',term:'Term',period:'Price basis',now:'Confirmed available',area:'Area',feature:'Amenity'};const chips=[];for(const [key,value]of data){if(value&&labels[key])chips.push({key,value,label:`${labels[key]}: ${value==='1'&&key==='now'?'yes':value}`});}if(savedOnly)chips.push({key:'saved',value:'1',label:'Saved properties'});$('#active-filters').innerHTML=chips.map((c,i)=>`<button class="chip" data-chip="${i}" aria-label="Remove ${esc(c.label)}">${esc(c.label)} <span>×</span></button>`).join('');$$('[data-chip]').forEach(b=>b.onclick=()=>{const c=chips[Number(b.dataset.chip)];if(c.key==='saved')savedOnly=false;else if(['area','feature'].includes(c.key))$$(`input[name="${c.key}"]`).find(x=>x.value===c.value).checked=false;else {const el=filterForm.elements[c.key];if(el.type==='checkbox')el.checked=false;else el.value='';}syncAreaPicker();page=1;search();});}
+async function search({persist=true}={}){const n=++requestId;abort?.abort();abort=new AbortController();if(persist)persistFilters();chips();$('#result-count').textContent='Finding your next chapter…';$('#results').setAttribute('aria-busy','true');try{const result=await api.search(formParams(),{signal:abort.signal});if(n!==requestId)return;if(!result.rows.length&&page>1){page=1;return search();}result.rows.forEach(p=>cache.set(p.id,p));$('#result-count').textContent=`${result.count} ${result.count===1?'property':'properties'}${savedOnly?' saved':''}`;$('#results').className='property-grid results-grid'+(viewList?' list-view':'');$('#results').innerHTML=result.rows.length?result.rows.map(card).join(''):`<div class="empty"><span class="sun-mark"><img class="brand-emblem" src="/brand-mark.png" width="40" height="33" alt=""></span><h3>Your place is still out there.</h3><p>${savedOnly?'Tap the heart on any property to save it here.':'Try a wider area, a different budget, or fewer preferences.'}</p><button class="btn outline" id="empty-clear">Explore all properties <svg class="arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></button><p class="empty-contact"><a href="https://wa.me/66960122530">Or tell us what you’re looking for</a></p></div>`;$('#empty-clear')?.addEventListener('click',clearFilters);const total=Math.ceil(result.count/12);const pages=[];for(let i=1;i<=total;i++)if(i===1||i===total||Math.abs(i-page)<3)pages.push(i);$('#pagination').innerHTML=pages.map(i=>`<button ${i===page?'aria-current="page"':''} data-page="${i}" aria-label="Go to page ${i}">${i}</button>`).join('');$$('[data-page]').forEach(b=>b.onclick=()=>{page=Number(b.dataset.page);search();$('#explore').scrollIntoView();});syncFavorites();}catch(error){if(error.name==='AbortError'||n!==requestId)return;$('#result-count').textContent='Unable to load properties';$('#results').innerHTML='<div class="empty"><h3>A little pause in paradise.</h3><p>We couldn’t load the collection. Please check your connection and try again.</p><button id="retry" class="btn">Try again <svg class="arrow-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></button></div>';$('#retry').onclick=()=>search();}finally{if(n===requestId)$('#results').removeAttribute('aria-busy');}}
+function clearFilters(){filterForm.reset();syncAreaPicker();$('#sort').value='newest';savedOnly=false;page=1;$('#budget-output').textContent='Any budget';search();}
+function setFilter(values){filterForm.reset();savedOnly=false;for(const [key,value]of Object.entries(values)){if(key==='area')selectAreas([value]);else if(filterForm.elements[key])filterForm.elements[key].value=value;}syncAreaPicker();page=1;search();$('#explore').scrollIntoView();}
+const featuredAreas = new Set([
+  'Bang Tao', 'Chalong', 'Cherngtalay', 'Kamala', 'Karon', 'Kata', 'Kathu',
+  'Nai Harn', 'Pa Klok', 'Patong', 'Phuket Town', 'Rawai', 'Surin', 'Thalang',
+]);
+const areaToggle = $('#area-toggle');
+const areaQuery = $('#area-query');
+
+function syncAreaPicker() {
+  const expanded = areaToggle.getAttribute('aria-expanded') === 'true';
+  areaQuery.closest('label').hidden = !expanded;
+  const query = areaQuery.value.trim().toLowerCase();
+  let visibleCount = 0;
+  $$('#location-filters .check').forEach(label => {
+    const input = label.querySelector('input');
+    const name = input.value;
+    const matches = name.toLowerCase().includes(query) || canonicalArea(query) === name;
+    label.hidden = expanded ? !matches : !featuredAreas.has(name) && !input.checked;
+    if (!label.hidden) visibleCount++;
+  });
+  $('#area-feedback').hidden = visibleCount > 0;
+  areaToggle.textContent = expanded ? 'Show fewer areas' : 'Show all areas';
+}
+
+areaToggle.onclick = () => {
+  const expanded = areaToggle.getAttribute('aria-expanded') === 'true';
+  areaToggle.setAttribute('aria-expanded', String(!expanded));
+  if (expanded) areaQuery.value = '';
+  syncAreaPicker();
+};
+areaQuery.oninput = syncAreaPicker;
+
 function populateAreas() {
   const locations = facets.map(property => property.location);
   const groups = areaGroups(locations);
@@ -28,11 +59,11 @@ function populateAreas() {
     `<optgroup label="${esc(district)}">${areas.map(area => `<option>${esc(area)}</option>`).join('')}</optgroup>`
   ).join('');
   hero.value = groups.some(([, areas]) => areas.includes(selected)) ? selected : '';
-  $('#location-filters').innerHTML = groups.map(([district, areas]) =>
-    `<details class="area-group"><summary>${esc(district)}</summary><div class="check-list">${areas.map(area =>
-      `<label class="check"><input name="area" type="checkbox" value="${esc(area)}">${esc(area)}</label>`
-    ).join('')}</div></details>`
+  const allAreas = groups.flatMap(([, areas]) => areas).sort((a, b) => a.localeCompare(b, 'en'));
+  $('#location-filters').innerHTML = allAreas.map(area =>
+    `<label class="check"><input name="area" type="checkbox" value="${esc(area)}">${esc(area)}</label>`
   ).join('');
+  syncAreaPicker();
   $('#owner-areas').innerHTML = areaSuggestions(locations).map(area => `<option value="${esc(area)}"></option>`).join('');
   $('#area-directory').innerHTML = groups.map(([district, areas]) =>
     `<div><h3>${esc(district)}</h3><ul>${areas.map(area =>
@@ -66,7 +97,7 @@ lightboxImage.addEventListener('load', () => {
 let gallery=[],galleryIndex=0,swipeStart;function openGallery(p,index){gallery=(p.image_paths||[]).slice(0,10);galleryIndex=index;const box=$('#lightbox');const show=()=>{lightboxImage.src=imageUrl(gallery[galleryIndex]);lightboxImage.alt=cleanTitle(p.title)+' — photo '+(galleryIndex+1);$('#lightbox-count').textContent=`${String(galleryIndex+1).padStart(2,'0')} / ${String(gallery.length).padStart(2,'0')}`;$('#lightbox-prev').disabled=gallery.length<2;$('#lightbox-next').disabled=gallery.length<2;};const move=n=>{galleryIndex=(galleryIndex+n+gallery.length)%gallery.length;show();};$('#lightbox-prev').onclick=()=>move(-1);$('#lightbox-next').onclick=()=>move(1);box.onkeydown=e=>{if(e.key==='ArrowRight')move(1);if(e.key==='ArrowLeft')move(-1);};lightboxImage.ontouchstart=e=>swipeStart=e.changedTouches[0].clientX;lightboxImage.ontouchend=e=>{const dx=e.changedTouches[0].clientX-swipeStart;if(Math.abs(dx)>40)move(dx<0?1:-1);};show();box.showModal();}
 function openFilters(open){$('#filter-panel').classList.toggle('open',open);$('#filters-open').setAttribute('aria-expanded',String(open));if(open)$('#filters-close').focus();}
 $('#filters-open').onclick=()=>openFilters(true);$('#filters-close').onclick=()=>{openFilters(false);$('#filters-open').focus();};document.addEventListener('keydown',e=>{if(e.key==='Escape')openFilters(false);});
-filterForm.addEventListener('submit',e=>{e.preventDefault();page=1;search();openFilters(false);});filterForm.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{page=1;search();},280);});$('#clear-filters').onclick=clearFilters;$('#sort').onchange=()=>{page=1;search();};$('#budget-slider').oninput=()=>{const slider=$('#budget-slider');const any=slider.value===slider.max;filterForm.elements.max.value=any?'':slider.value;$('#budget-output').textContent=any?'Any budget':'฿'+Number(slider.value).toLocaleString();};$('#view-toggle').onclick=()=>{viewList=!viewList;$('#results').classList.toggle('list-view',viewList);$('#view-toggle').setAttribute('aria-label',viewList?'Switch to grid view':'Switch to list view');$('#view-toggle').textContent=viewList?'⊞':'☷';};
+filterForm.addEventListener('submit',e=>{e.preventDefault();page=1;search();openFilters(false);});filterForm.addEventListener('input',event=>{if(event.target.id==='area-query')return;if(event.target.name==='area')syncAreaPicker();clearTimeout(searchTimer);searchTimer=setTimeout(()=>{page=1;search();},280);});$('#clear-filters').onclick=clearFilters;$('#sort').onchange=()=>{page=1;search();};$('#budget-slider').oninput=()=>{const slider=$('#budget-slider');const any=slider.value===slider.max;filterForm.elements.max.value=any?'':slider.value;$('#budget-output').textContent=any?'Any budget':'฿'+Number(slider.value).toLocaleString();};$('#view-toggle').onclick=()=>{viewList=!viewList;$('#results').classList.toggle('list-view',viewList);$('#view-toggle').setAttribute('aria-label',viewList?'Switch to grid view':'Switch to list view');$('#view-toggle').textContent=viewList?'⊞':'☷';};
 $('#hero-search').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.currentTarget));setFilter({area:f.location,offer:f.offer,beds:f.beds});};
 $('#saved-open').onclick=()=>{if(currentProperty){showHome();history.pushState(null,'','/');}savedOnly=!savedOnly;page=1;search();$('#explore').scrollIntoView();};
 document.addEventListener('click',e=>{const fav=e.target.closest('[data-favorite]');if(fav){const id=fav.dataset.favorite;favorites.has(id)?favorites.delete(id):favorites.add(id);syncFavorites();if(savedOnly&&!currentProperty)search();return;}const p=e.target.closest('[data-property]');if(p&&!e.metaKey&&!e.ctrlKey){e.preventDefault();openProperty(p.dataset.property);return;}const s=e.target.closest('[data-share]');if(s){const p=cache.get(s.dataset.share);if(p)share(p);return;}const area=e.target.closest('[data-area]');if(area&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey){e.preventDefault();setFilter({area:area.dataset.area});}const close=e.target.closest('[data-close]');if(close)close.closest('dialog').close();});
