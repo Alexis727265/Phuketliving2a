@@ -1,10 +1,11 @@
+import {areaGroups, areaSuggestions, canonicalArea} from '../areas.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {buildSearch,createApi} from '../data.mjs';
 import {makeWorker} from '../worker.mjs';
 import {readFile} from 'node:fs/promises';
 const id='4289c0bd-92bb-4f2e-a116-01cbf87d6fe4';
-test('database search composes multi-area, amenities, numeric, sort and pagination filters',()=>{const q=buildSearch({areas:['Bang Tao','Rawai'],features:['Pool','Pet friendly'],min:20000,max:50000,beds:'0',guests:4,land:100,page:2,sort:'price-asc'});assert.equal(q.get('status'),'eq.published');assert.equal(q.get('location'),'in.("Bang Tao","Rawai")');assert.equal(q.get('features'),'cs.{"Pool","Pet friendly"}');assert.equal(q.get('bedrooms'),'eq.0');assert.equal(q.get('details->land_sqm'),'gte.100');assert.equal(q.get('offset'),'12');assert.equal(q.get('order'),'price.asc,id.asc');});
+test('database search composes multi-area, amenities, numeric, sort and pagination filters',()=>{const q=buildSearch({areas:['Bang Tao','Rawai'],features:['Pool','Pet friendly'],min:20000,max:50000,beds:'0',guests:4,land:100,page:2,sort:'price-asc'});assert.equal(q.get('status'),'eq.published');assert.match(q.get('location'), /^imatch\..*bang.*tao.*rawai/);assert.equal(q.get('features'),'cs.{"Pool","Pet friendly"}');assert.equal(q.get('bedrooms'),'eq.0');assert.equal(q.get('details->land_sqm'),'gte.100');assert.equal(q.get('offset'),'12');assert.equal(q.get('order'),'price.asc,id.asc');});
 test('availability requires recent confirmation and inputs cannot inject query expressions',()=>{const q=buildSearch({now:true,q:'villa),status.eq.pending'});assert.equal(q.get('details->>available_now'),'eq.true');assert.match(q.get('details->>availability_confirmed_on'),/^gte.\d{4}-/);assert.ok(!q.get('or').includes('status.eq.pending'));});
 test('admin membership is verified and anonymous mutation is blocked before transport',async()=>{let calls=0;const api=createApi({fetch:async url=>{calls++;return Response.json(url.includes('/auth/v1/')?{access_token:'x',user:{id}}:[]);}});await assert.rejects(api.create(id,{}),/check title|check/);await assert.rejects(api.all(),/sign in/);assert.equal(calls,0);await assert.rejects(api.login('owner@example.com','wrong'),/not authorized/);assert.equal(api.isLoggedIn(),false);});
 test('worker preserves legacy URLs, provides server-rendered metadata and hides unpublished rows',async()=>{const html=await readFile(new URL('../index.html',import.meta.url),'utf8');const worker=makeWorker({'/index.html':html,'/main.mjs':'export {};'});const p={id,title:'Real villa <safe>',description:'A real property description',property_type:'Villa',location:'Rawai',price:80000,price_period:'month',offer:'rent',bedrooms:3,bathrooms:3,features:['Pool'],image_paths:[id+'/1.jpg'],created_at:'2026-11-01'};let query;const env={TEST_FETCH:async url=>{query=url;return Response.json([p]);}};const response=await worker.fetch(new Request('https://example.com/property/'+id),env);assert.equal(response.status,200);const body=await response.text();assert.match(body,/og:title" content="Real villa &lt;safe&gt;/);assert.match(body,/application\/ld\+json/);assert.match(body,/id="server-content"/);assert.ok(query.includes('status=eq.published'));assert.ok(!body.includes('service_role'));const legacy=await worker.fetch(new Request('https://example.com/?property='+id),env);assert.equal(legacy.status,301);assert.equal(legacy.headers.get('location'),'https://example.com/property/'+id);const missing=await worker.fetch(new Request('https://example.com/property/'+id),{TEST_FETCH:async()=>Response.json([])});assert.equal(missing.status,404);const admin=await worker.fetch(new Request('https://example.com/admin'),env);assert.match(await admin.text(),/noindex,nofollow/);});
@@ -80,4 +81,27 @@ test('small Android picker MP4s use the standard upload and update only the vide
   assert.deepEqual(JSON.parse(update.options.body), {video_path:videoPath});
   await api.saveVideo(id,null,updatedAt);
   assert.deepEqual(JSON.parse(requests.at(-1).options.body), {video_path:null});
+});
+
+test('the area catalogue stays available with no listings and keeps custom locations', () => {
+  const groups = areaGroups(['Pa Khlok', 'Bangjo Thalang Chergentalay', 'Nai Harn, Rawai']);
+  const options = groups.flatMap(([, names]) => names);
+  for (const area of ['Pa Klok', 'Kamala', 'Kata', 'Karon', 'Talat Yai', 'Sakhu', 'Nai Yang']) {
+    assert.ok(options.includes(area), area);
+    assert.ok(areaSuggestions().includes(area), area);
+  }
+  assert.equal(canonicalArea('Pa Khlok'), 'Pa Klok');
+  assert.equal(canonicalArea('BangTao'), 'Bang Tao');
+  assert.ok(!options.includes('Pa Khlok'));
+  assert.deepEqual(groups.at(-1)[1], ['Bangjo Thalang Chergentalay', 'Nai Harn, Rawai']);
+  assert.ok(areaSuggestions(['A custom village']).includes('A custom village'));
+});
+
+test('known areas and legacy locations can be combined without overriding text search', () => {
+  const legacy = 'Nai Harn, Rawai';
+  assert.equal(buildSearch({areas: [legacy]}).get('location'), 'in.("Nai Harn, Rawai")');
+  const q = buildSearch({areas: ['Pa Khlok', legacy], q: 'pool'});
+  assert.match(q.get('and'), /location\.imatch\..*pa.*khlok/);
+  assert.match(q.get('and'), /location\.in\.\("Nai Harn, Rawai"\)/);
+  assert.match(q.get('or'), /title\.ilike\.\*pool\*/);
 });

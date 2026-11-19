@@ -1,5 +1,6 @@
 import { config } from './config.mjs';
 import {validVideoPath, validateVideoFile, videoBucket} from './video.mjs';
+import {areaPattern, canonicalArea, isCatalogueArea} from './areas.mjs';
 const standardVideoUploadLimit = 6_000_000;
 const uploadOrigin = config.url.replace(/\.supabase\.co$/, '.storage.supabase.co');
 export const imageUrl = path => path ? `${config.url}/storage/v1/object/public/${config.bucket}/${path.split('/').map(encodeURIComponent).join('/')}` : '';
@@ -8,7 +9,13 @@ export function buildSearch(params={}) {
  const clean=v=>String(v??'').trim();
  for(const [key,col] of [['offer','offer'],['type','property_type'],['period','price_period']])if(params[key])q.set(col,'eq.'+clean(params[key]));
  if(params.min||params.max||['price-asc','price-desc'].includes(params.sort))q.append('price','gte.100');
- const areas=params.areas||[];if(areas.length)q.set('location','in.('+areas.map(x=>'"'+clean(x).replace(/["\\]/g,'')+'"').join(',')+')');
+ const areas = [...new Set((params.areas || []).map(area => canonicalArea(clean(area))).filter(Boolean))];
+ const pattern = areaPattern(areas);
+ const custom = areas.filter(area => !isCatalogueArea(area));
+ const quote = value => '"' + value.replace(/["\\]/g, '\\$&') + '"';
+ const exact = custom.length ? `in.(${custom.map(quote).join(',')})` : '';
+ if (pattern && exact) q.set('and', `(or(location.imatch.${quote(pattern)},location.${exact}))`);
+ else if (pattern || exact) q.set('location', pattern ? 'imatch.' + pattern : exact);
  for(const [key,col,op] of [['min','price','gte'],['max','price','lte'],['beds','bedrooms','gte'],['baths','bathrooms','gte'],['size','size_sqm','gte'],['land','details->land_sqm','gte'],['guests','details->max_guests','gte']])if(clean(params[key])!==''&&Number.isFinite(Number(params[key])))q.append(col,`${key==='beds'&&String(params.beds)==='0'?'eq':op}.${Number(params[key])}`);
  if(params.term)q.set('details->>rental_term','eq.'+params.term);
  if(params.now){q.set('details->>available_now','eq.true');q.set('details->>availability_confirmed_on','gte.'+new Date(Date.now()-30*86400000).toISOString().slice(0,10));}

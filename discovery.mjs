@@ -51,7 +51,7 @@ export const discoveryAreas=[
     "alt": "Chalong Bay, Phuket"
   },
   {
-    "area": "Nai Harn, Rawai",
+    "area": "Nai Harn",
     "name": "Nai Harn",
     "key": "nai-harn",
     "caption": "Nai Harn coastline",
