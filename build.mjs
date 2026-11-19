@@ -4,9 +4,10 @@ execFileSync(process.execPath,['--test','tests/backend-validation.test.mjs','tes
 await rm('dist',{recursive:true,force:true});await mkdir('dist/backend',{recursive:true});
 const files=['index.html','styles.css','favicon.svg','config.mjs','data.mjs','pricing.mjs','ui.mjs','main.mjs','admin.mjs','discovery.mjs','backend/client.mjs','backend/search.mjs','sharing.mjs','video.mjs'];
 const assets={};for(const file of files){await copyFile(file,'dist/'+file);assets['/'+file]=await readFile(file,'utf8');}
-const tus = await readFile('node_modules/tus-js-client/dist/tus.min.js', 'utf8');
-assets['/tus.min.js'] = tus;
-await writeFile('dist/tus.min.js', tus);
+const tus = (await readFile('node_modules/tus-js-client/dist/tus.min.js', 'utf8')).replace(/\n?\/\/# sourceMappingURL=.*$/, '');
+const tusModule = `const module = { exports: {} };\nconst exports = module.exports;\n${tus}\nexport const { Upload } = module.exports;\n`;
+assets['/tus.mjs'] = tusModule;
+await writeFile('dist/tus.mjs', tusModule);
 const heroImage = 'villa-gateways-hero.jpg';
 await copyFile(heroImage, 'dist/' + heroImage);
 const heroImageBase64 = (await readFile(heroImage)).toString('base64');

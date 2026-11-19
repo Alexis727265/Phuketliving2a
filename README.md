@@ -53,7 +53,7 @@ Administrator access requires both a valid Auth session and membership in `pl2_a
 
 Photos are converted to JPEG and resized without upscaling to fit 1920×1080 landscape or 1080×1920 portrait. At most ten images can be saved. Desktop drop support, Android-compatible selection, duplicate selection detection, cover selection, drag reordering and accessible reorder buttons are included. Upload progress is per image.
 
-Admins can attach one optional MP4 under **Photos & video**. Uploads resume after transient network failures, and previews work for drafts. `migrations/20261119034325_listing_videos.sql` adds the video field, bucket and access policies.
+Admins can attach one optional MP4 under **Video**. Clips over 6 MB use resumable uploads, and previews work for drafts. `migrations/20261119034325_listing_videos.sql` adds the video field, bucket and access policies.
 
 New objects use unique names. The row saves only after uploads finish. Old objects are removed only after the database save succeeds and only when they are no longer referenced by the current listing. Listing deletion requires an explicit confirmation; cleanup failures are reported. Upload errors keep selections available for retry. Unsaved changes warn before closing/reloading.
 

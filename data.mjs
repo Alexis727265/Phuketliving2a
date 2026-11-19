@@ -1,5 +1,6 @@
 import { config } from './config.mjs';
 import {validVideoPath, validateVideoFile, videoBucket} from './video.mjs';
+const standardVideoUploadLimit = 6_000_000;
 const uploadOrigin = config.url.replace(/\.supabase\.co$/, '.storage.supabase.co');
 export const imageUrl = path => path ? `${config.url}/storage/v1/object/public/${config.bucket}/${path.split('/').map(encodeURIComponent).join('/')}` : '';
 export function buildSearch(params={}) {
@@ -39,6 +40,10 @@ export function createApi({fetch:send=globalThis.fetch,sessionStore}={}) {
  const db=async(path,opts)=>(await call(path,opts)).data;
  const validId=id=>{if(!/^[a-f0-9-]{36}$/i.test(id))throw Error('Invalid property reference');return id;};
  const one=rows=>{if(rows?.length!==1)throw Error('The listing could not be saved. Refresh and sign in again.');return rows[0];};
+ async function saveFields(id,row,updatedAt){
+  const path='/rest/v1/pl2_properties?id=eq.'+validId(id)+(updatedAt?'&updated_at=eq.'+encodeURIComponent(updatedAt):'');
+  return one(await db(path,{admin:true,method:'PATCH',...json(row),headers:{'content-type':'application/json',Prefer:'return=representation'}}));
+ }
  function validate(p,id){
   const row={};for(const [field,max] of [['title',120],['location',100],['description',5000]]){row[field]=String(p[field]||'').trim();if(!row[field]||row[field].length>max)throw Error(`Please check ${field}. Maximum ${max} characters.`);}
   for(const [key,allowed] of Object.entries({offer:['rent','sale'],property_type:['Condo','Villa','House','Apartment','Land','Commercial'],price_period:['month','day','total'],status:['pending','published','rejected']})){if(!allowed.includes(p[key]))throw Error('Please check '+key);row[key]=p[key];}
@@ -64,7 +69,11 @@ export function createApi({fetch:send=globalThis.fetch,sessionStore}={}) {
   async all(){return db('/rest/v1/pl2_properties?select=*&order=updated_at.desc&limit=1000',{admin:true});},
   async messages(){return db('/rest/v1/pl2_messages?select=*&order=created_at.desc&limit=100',{admin:true});},
   async contacts(id){return (await db('/rest/v1/pl2_property_contacts?property_id=eq.'+validId(id),{admin:true}))?.[0]||null;},
-  async save(id,p,expectedUpdatedAt){const row=validate(p,id);if(row.image_paths.some(x=>!x.startsWith(id+'/')))throw Error('A photo does not belong to this property.');return one(await db('/rest/v1/pl2_properties?id=eq.'+validId(id)+(expectedUpdatedAt?'&updated_at=eq.'+encodeURIComponent(expectedUpdatedAt):''),{admin:true,method:'PATCH',...json(row),headers:{'content-type':'application/json',Prefer:'return=representation'}}));},
+  async save(id,p,expectedUpdatedAt){const row=validate(p,id);if(row.image_paths.some(x=>!x.startsWith(id+'/')))throw Error('A photo does not belong to this property.');return saveFields(id,row,expectedUpdatedAt);},
+  async saveVideo(id,path,expectedUpdatedAt){
+   if(path!==null&&!validVideoPath(path,id))throw Error('The video does not belong to this property.');
+   return saveFields(id,{video_path:path},expectedUpdatedAt);
+  },
   async create(id,p){const row=validate(p,id);if(row.image_paths.some(x=>!x.startsWith(id+'/')))throw Error('A photo does not belong to this property.');return one(await db('/rest/v1/pl2_properties',{admin:true,method:'POST',...json({id:validId(id),...row}),headers:{'content-type':'application/json',Prefer:'return=representation'}}));},
   async saveContact(id,p){return db('/rest/v1/pl2_property_contacts?on_conflict=property_id',{admin:true,method:'POST',...json({property_id:validId(id),name:p.name,email:p.email,phone:p.phone}),headers:{'content-type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'}});},
   async setStatus(id,status){if(!['pending','published','rejected'].includes(status))throw Error('Invalid status');return one(await db('/rest/v1/pl2_properties?id=eq.'+validId(id),{admin:true,method:'PATCH',...json({status}),headers:{'content-type':'application/json',Prefer:'return=representation'}}));},
@@ -72,11 +81,19 @@ export function createApi({fetch:send=globalThis.fetch,sessionStore}={}) {
   async cleanImages(id,paths){if(!paths.length)return;if(paths.some(x=>!x.startsWith(validId(id)+'/')||x.includes('..')))throw Error('Unsafe image path');const current=await this.get(id,{admin:true});const unused=paths.filter(x=>!current?.image_paths?.includes(x));if(unused.length)await db('/storage/v1/object/'+config.bucket,{admin:true,method:'DELETE',...json({prefixes:unused})});},
   async uploadVideo(path,file,onProgress){
    if(!validVideoPath(path))throw Error('Invalid property video path.');
-   validateVideoFile(file);
+   await validateVideoFile(file);
+   if(file.size<=standardVideoUploadLimit){
+    onProgress?.(0);
+    await db(`/storage/v1/object/${videoBucket}/${path}`,{
+     admin:true,method:'POST',body:file,headers:{'content-type':'video/mp4','x-upsert':'false'},
+    });
+    onProgress?.(100);
+    return;
+   }
    await adminAccessToken();
-   await import('./tus.min.js');
+   const {Upload}=await import('./tus.mjs');
    await new Promise((resolve,reject)=>{
-    const upload=new globalThis.tus.Upload(file,{
+    const upload=new Upload(file,{
      endpoint:uploadOrigin+'/storage/v1/upload/resumable',
      headers:{apikey:config.publicKey},
      onBeforeRequest:async request=>request.setHeader('authorization','Bearer '+await adminAccessToken()),
@@ -87,7 +104,12 @@ export function createApi({fetch:send=globalThis.fetch,sessionStore}={}) {
      removeFingerprintOnSuccess:true,
      fingerprint:async()=>`phuket-living-video:${path}`,
      onProgress:(uploaded,total)=>onProgress?.(Math.round(uploaded/total*100)),
-     onError:()=>reject(Error('Video upload failed. Check your connection and press Save property to retry.')),
+     onError:error=>{
+      const status=error.originalResponse?.getStatus();
+      if(status===401||status===403)reject(Error('Video upload was denied. Sign in again and retry.'));
+      else if(status===413)reject(Error('Supabase rejected this video because of its size. Choose a smaller MP4.'));
+      else reject(Error('Video upload failed. Check your connection and save again to retry.'));
+     },
      onSuccess:resolve,
     });
     upload.findPreviousUploads().then(previous=>{

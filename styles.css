@@ -87,6 +87,5 @@
 .listing-video h2,.listing-video h3{margin:0 0 12px}
 .listing-video video,.listing-video-player{display:block;width:100%;max-width:760px;aspect-ratio:16/9;object-fit:contain;background:#102522;border-radius:7px}
 .listing-video-player[hidden]{display:none}
-.editor-video{margin-top:22px;padding-top:20px;border-top:1px solid var(--line)}
 .editor-video .hint{margin:6px 0 14px}
 .editor-video .admin-toolbar,.listing-video-player{margin-top:12px}

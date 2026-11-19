@@ -52,3 +52,32 @@ test('video cleanup keeps the current attachment and rejects paths from other li
   await assert.rejects(api.cleanVideos(id,[replaced.replace(id,'3d5ec584-ecef-4362-bc6c-a483616d010f')]),/Unsafe video path/);
   assert.deepEqual(deletions,[{prefixes:[replaced]}]);
 });
+
+test('small Android picker MP4s use the standard upload and update only the video field', async () => {
+  const videoPath = id + '/cd8db19f-f82e-4df8-b5fe-405c405ce5f5.mp4';
+  const genericFile = new File(['\0\0\0\x18ftypisom\0\0\0\0'], 'download', {type:'application/octet-stream'});
+  const wrongFile = new File(['\0\0\0\x18ftypqt  \0\0\0\0'], 'download', {type:'video/quicktime'});
+  const updatedAt = '2026-11-19T04:10:23.988496+00:00';
+  const requests = [];
+  const api = createApi({fetch: async (url, options) => {
+    if(url.includes('grant_type=password'))return Response.json({access_token:'admin-token',user:{id},expires_in:3600});
+    if(url.includes('pl2_admins'))return Response.json([{user_id:id}]);
+    requests.push({url,options});
+    return Response.json([{id,video_path:videoPath}]);
+  }});
+  await api.login('owner@example.com','password');
+  await assert.rejects(api.uploadVideo(videoPath,wrongFile),/Choose an MP4/);
+  assert.equal(requests.length,0);
+  await api.uploadVideo(videoPath,genericFile);
+  const [upload] = requests;
+  assert.ok(upload.url.endsWith('/storage/v1/object/phuketliving2-videos/'+videoPath));
+  assert.equal(upload.options.headers['content-type'],'video/mp4');
+  assert.equal(upload.options.headers.authorization,'Bearer admin-token');
+  assert.equal(upload.options.body,genericFile);
+  await api.saveVideo(id,videoPath,updatedAt);
+  const update = requests.at(-1);
+  assert.equal(new URL(update.url).searchParams.get('updated_at'),'eq.'+updatedAt);
+  assert.deepEqual(JSON.parse(update.options.body), {video_path:videoPath});
+  await api.saveVideo(id,null,updatedAt);
+  assert.deepEqual(JSON.parse(requests.at(-1).options.body), {video_path:null});
+});
