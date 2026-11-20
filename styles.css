@@ -185,20 +185,10 @@
   margin-inline: auto;
 }
 
-.area-toggle {
-  display: block;
-  margin-bottom: 12px;
-  padding: 4px 0;
-  color: var(--teal);
-  font-weight: 700;
-  text-align: left;
-}
-
 .area-finder {
   margin-bottom: 12px;
 }
 
-.area-finder[hidden],
 .area-list [hidden] {
   display: none;
 }

@@ -72,15 +72,41 @@ for (const name of areaNames.keys()) canonicalNames.set(areaKey(name), name);
 
 export const canonicalArea = name => canonicalNames.get(areaKey(name)) ?? name;
 
+// Treat a legacy label made entirely of known areas as its first neighborhood.
+const areaSeparator = '[^\\p{L}\\p{N}]';
+const sortedAliases = [...areaNames.values()].flat().sort((a, b) => b.length - a.length);
+const areaAlternatives = sortedAliases.map(alias => alias.split(' ').join(areaSeparator + '*'));
+const knownAreaParts = new RegExp(`(^|${areaSeparator})(${areaAlternatives.join('|')})(?=$|${areaSeparator})`, 'giu');
+
+export function areaOption(location) {
+  const name = canonicalArea(location.trim());
+  if (areaNames.has(name)) return name;
+  let firstArea;
+  const remainder = name.replace(knownAreaParts, (_, separator, match) => {
+    firstArea ??= canonicalArea(match);
+    return separator;
+  });
+  return firstArea && !areaKey(remainder) ? firstArea : name;
+}
+
+export function areaOptionKey(location) {
+  const name = areaOption(location);
+  return areaKey(name) || name;
+}
+
 export function areaGroups(locations = []) {
   const groups = catalogue.map(([name, entries]) => [name, entries.map(([area]) => area).sort(sortAreas)]);
-  const custom = [...new Set(locations.filter(name => name && !areaNames.has(canonicalArea(name))))].sort(sortAreas);
-  if (custom.length) groups.push(['Other listed locations', custom]);
+  const custom = new Map();
+  for (const name of locations.map(areaOption).filter(Boolean).sort(sortAreas)) {
+    const key = areaKey(name) || name;
+    if (!areaNames.has(name) && !custom.has(key)) custom.set(key, name);
+  }
+  if (custom.size) groups.push(['Other listed locations', [...custom.values()]]);
   return groups;
 }
 
 export function areaSuggestions(locations = []) {
-  return [...new Set([...areaNames.keys(), ...locations.filter(Boolean)])].sort(sortAreas);
+  return areaGroups(locations).flatMap(([, areas]) => areas).sort(sortAreas);
 }
 
 // Match whole place names in free-text locations, including names written without spaces.
