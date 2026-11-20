@@ -86,13 +86,19 @@ test('small Android picker MP4s use the standard upload and update only the vide
 test('the area catalogue deduplicates known aliases, combined labels and custom spellings', () => {
   const locations = [
     'Pa Khlok', 'PA-KLOK', 'Bangjo Thalang Chergentalay', 'Layan Bang Tao', 'Nai Harn, Rawai',
-    'A Custom Village', 'a custom-village', ' Baan Sirarom, Pa Klok ',
+    'A Custom Village', 'a custom-village', ' Baan Sirarom, Pa Klok ', 'Ratsada',
   ];
   const groups = areaGroups(locations);
   const options = groups.flatMap(([, names]) => names);
-  for (const area of ['Pa Klok', 'Bang Jo', 'Layan', 'Nai Harn', 'Rawai', 'Kamala', 'Kata', 'Karon', 'Talat Yai', 'Sakhu', 'Nai Yang']) {
+  const defaults = areaSuggestions();
+  assert.equal(defaults.length, 22);
+  assert.ok(!defaults.includes('Rassada'));
+  assert.ok(options.includes('Rassada'));
+  assert.ok(!options.includes('Talat Yai'));
+  assert.ok(!options.includes('Sakhu'));
+  for (const area of ['Pa Klok', 'Bang Jo', 'Layan', 'Nai Harn', 'Rawai', 'Kamala', 'Kata', 'Karon', 'Nai Yang']) {
     assert.ok(options.includes(area), area);
-    assert.ok(areaSuggestions().includes(area), area);
+    assert.ok(defaults.includes(area), area);
   }
   assert.equal(canonicalArea('Pa Khlok'), 'Pa Klok');
   assert.equal(canonicalArea('BangTao'), 'Bang Tao');

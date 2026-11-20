@@ -63,6 +63,14 @@ const catalogue = [
   ]],
 ];
 
+// Offer the main markets by default and surface smaller areas when they have listings.
+const defaultAreas = new Set([
+  'Cape Panwa', 'Chalong', 'Karon', 'Kata', 'Ko Kaeo', 'Nai Harn', 'Phuket Town', 'Rawai',
+  'Kamala', 'Kathu', 'Patong',
+  'Bang Jo', 'Bang Tao', 'Cherngtalay', 'Laguna', 'Layan', 'Mai Khao', 'Nai Thon',
+  'Nai Yang', 'Pa Klok', 'Surin', 'Thalang',
+]);
+
 const collator = new Intl.Collator('en');
 const sortAreas = (a, b) => collator.compare(a, b);
 const areaKey = value => value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
@@ -95,9 +103,13 @@ export function areaOptionKey(location) {
 }
 
 export function areaGroups(locations = []) {
-  const groups = catalogue.map(([name, entries]) => [name, entries.map(([area]) => area).sort(sortAreas)]);
+  const listed = new Set(locations.map(areaOption).filter(Boolean));
+  const groups = catalogue.map(([district, entries]) => {
+    const areas = entries.map(([name]) => name).filter(name => defaultAreas.has(name) || listed.has(name));
+    return [district, areas.sort(sortAreas)];
+  });
   const custom = new Map();
-  for (const name of locations.map(areaOption).filter(Boolean).sort(sortAreas)) {
+  for (const name of [...listed].sort(sortAreas)) {
     const key = areaKey(name) || name;
     if (!areaNames.has(name) && !custom.has(key)) custom.set(key, name);
   }
