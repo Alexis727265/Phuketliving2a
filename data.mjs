@@ -82,7 +82,13 @@ export function createApi({fetch:send=globalThis.fetch,sessionStore}={}) {
    return saveFields(id,{video_path:path},expectedUpdatedAt);
   },
   async create(id,p){const row=validate(p,id);if(row.image_paths.some(x=>!x.startsWith(id+'/')))throw Error('A photo does not belong to this property.');return one(await db('/rest/v1/pl2_properties',{admin:true,method:'POST',...json({id:validId(id),...row}),headers:{'content-type':'application/json',Prefer:'return=representation'}}));},
-  async saveContact(id,p){return db('/rest/v1/pl2_property_contacts?on_conflict=property_id',{admin:true,method:'POST',...json({property_id:validId(id),name:p.name,email:p.email,phone:p.phone}),headers:{'content-type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'}});},
+  async saveContact(id,{name,email,phone}){
+   return db('/rest/v1/pl2_property_contacts?on_conflict=property_id',{
+    admin:true,method:'POST',
+    ...json({property_id:validId(id),name:name||null,email:email||null,phone:phone||null}),
+    headers:{'content-type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},
+   });
+  },
   async setStatus(id,status){if(!['pending','published','rejected'].includes(status))throw Error('Invalid status');return one(await db('/rest/v1/pl2_properties?id=eq.'+validId(id),{admin:true,method:'PATCH',...json({status}),headers:{'content-type':'application/json',Prefer:'return=representation'}}));},
   async upload(id,blob){if(!(blob instanceof Blob)||blob.type!=='image/jpeg'||blob.size>3000000)throw Error('Upload must be a JPEG under 3 MB');const path=validId(id)+'/'+crypto.randomUUID()+'.jpg';await db('/storage/v1/object/'+config.bucket+'/'+path,{admin:true,method:'POST',body:blob,headers:{'content-type':'image/jpeg','x-upsert':'false'}});return path;},
   async cleanImages(id,paths){if(!paths.length)return;if(paths.some(x=>!x.startsWith(validId(id)+'/')||x.includes('..')))throw Error('Unsafe image path');const current=await this.get(id,{admin:true});const unused=paths.filter(x=>!current?.image_paths?.includes(x));if(unused.length)await db('/storage/v1/object/'+config.bucket,{admin:true,method:'DELETE',...json({prefixes:unused})});},
