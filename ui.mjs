@@ -1,5 +1,5 @@
 import {displayPrice,displayPeriod} from './pricing.mjs';
-import {imageUrl} from './data.mjs';
+import {imageUrl} from './cloudflare/client.mjs';
 export const $=(q,root=document)=>root.querySelector(q);
 export const $$=(q,root=document)=>[...root.querySelectorAll(q)];
 export const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

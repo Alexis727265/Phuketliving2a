@@ -1,4 +1,4 @@
-import {imageUrl} from './data.mjs';
+import {imageUrl} from './cloudflare/client.mjs';
 export const discoveryPhoto=key=>imageUrl('branding/discovery-'+key+'-20261117.jpg');
 export const discoveryAreas=[
   {

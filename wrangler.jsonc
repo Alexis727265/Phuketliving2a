@@ -4,6 +4,26 @@
   "main": "release/worker.mjs",
   "compatibility_date": "2026-11-17",
   "workers_dev": true,
-  "build": { "command": "node build.mjs" },
-  "observability": { "enabled": true }
+  "build": {
+    "command": "node build.mjs"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "phuketliving",
+      "database_id": "6b866842-9504-4c36-8243-296c7e4e9440"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "phuketliving-media"
+    }
+  ],
+  "vars": {
+    "ACCESS_AUD": "7c8caffd8612cbe0feeafb924ca2fd8cfbbec1d4e53f2b51b794fd32724c26fb"
+  }
 }

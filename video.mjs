@@ -1,5 +1,5 @@
 export const videoBucket = 'phuketliving2-videos';
-export const maxVideoBytes = 50_000_000;
+export const maxVideoBytes = 100_000_000;
 const uuid = '[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}';
 const videoPath = new RegExp(`^${uuid}/${uuid}\\.mp4$`);
 
@@ -13,7 +13,7 @@ export function listingVideoUrl(property) {
 
 export async function validateVideoFile(file) {
   if (!(file instanceof Blob) || !file.size || file.size > maxVideoBytes) {
-    throw Error('Choose an MP4 video up to 50 MB.');
+    throw Error('Choose an MP4 video up to 100 MB.');
   }
   if (file.type === 'video/mp4' || /\.mp4$/i.test(file.name)) return;
 
