@@ -55,6 +55,12 @@ if(!['GET','HEAD'].includes(request.method))return new Response('Method not allo
     status, headers: { ...headers, 'content-type': type, 'cache-control': 'no-cache', ...(env?.STAGING_READ_ONLY==='1'?{'x-robots-tag':'noindex, nofollow'}:{}), ...extra },
   });
 };
+if(route===config.heroImage && env?.MEDIA){
+  const key = 'site/phuket-living-hero-69bb65f6.webp';
+  const photo = request.method==='HEAD' ? await env.MEDIA.head(key) : await env.MEDIA.get(key);
+  if(!photo)return respond(null,404,mime.webp);
+  return respond(photo.body??null,200,mime.webp,{'cache-control':'public,max-age=0,must-revalidate'});
+}
 if(u.pathname.startsWith('/videos/'))return serveVideo(request,u.pathname.slice('/videos/'.length),send);
 if(u.pathname==='/robots.txt'&&env?.STAGING_READ_ONLY==='1')return respond('User-agent: *\nDisallow: /\n',200,mime.txt);
 if(u.pathname==='/robots.txt')return respond(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /studio\nSitemap: ${u.origin}/sitemap.xml\n`,200,mime.txt);
