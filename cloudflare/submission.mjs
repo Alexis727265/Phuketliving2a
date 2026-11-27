@@ -2,12 +2,16 @@ import {validateProperty,validateJpeg} from '../backend/validation.mjs';
 import {insert} from './store.mjs';
 import {fail,json} from './media.mjs';
 async function limitedForm(req) {
+  const type=req.headers.get('content-type')||'';
+  if(!/^(multipart\/form-data|application\/x-www-form-urlencoded)(?:;|$)/i.test(type))throw fail('Choose a valid submission format.',415);
   const max=20000000;
   if(Number(req.headers.get('content-length'))>max)throw fail('Request is too large.',413);
   const reader=req.body?.getReader();if(!reader)throw fail('Empty form.');
   let size=0;const chunks=[];
   for (;;) {const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>max){await reader.cancel();throw fail('Request is too large.',413);}chunks.push(value);}
-  return new Response(new Blob(chunks),{headers:{'content-type':req.headers.get('content-type')||''}}).formData();
+  if(!size)throw fail('Empty form.');
+  try { return await new Response(new Blob(chunks),{headers:{'content-type':type}}).formData(); }
+  catch { throw fail('Invalid submission.'); }
 }
 export async function submit(req,env) {
   const form=await limitedForm(req), fields=Object.fromEntries(form), photos=form.getAll('photos');

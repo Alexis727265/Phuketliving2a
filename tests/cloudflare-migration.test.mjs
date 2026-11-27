@@ -130,6 +130,8 @@ test('Cloudflare accepts inquiries and owner submissions while protecting unlist
   assert.equal((await api.contacts(pending.id)).email,'qa@example.com');
   assert.equal((await api.search({})).count,0);
   const worker=makeWorker({'/index.html':'<!doctype html><title>Test</title>'});
+  const empty=await worker.fetch(new Request('https://stage.invalid/api/submit',{method:'POST'}),env);
+  assert.equal(empty.status,415);
   const blocked=await worker.fetch(new Request('https://stage.invalid/api/submit',{method:'POST'}),{...env,STAGING_READ_ONLY:'1'});
   assert.equal(blocked.status,503);
   const legacy=await worker.fetch(new Request('https://stage.invalid/?property='+pending.id),env);
